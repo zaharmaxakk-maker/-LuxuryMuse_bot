@@ -260,7 +260,6 @@ def callback_inline(call):
             return
 
         # ГЛАВНОЕ ИСПРАВЛЕНИЕ: Инициализация списка, если пользователя нет в базе
-        # Строка ниже теперь гарантированно корректна: favorites_db[user_id] = 
         if user_id not in favorites_db:
             favorites_db[user_id] = 
 
