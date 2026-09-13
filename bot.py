@@ -19,14 +19,24 @@ if not BOT_TOKEN:
     logger.error("Переменная окружения BOT_TOKEN не задана! Установите её в Railway → Variables")
     raise ValueError("BOT_TOKEN не найден в переменных окружения")
 
-ADMIN_ID = 8588778253
+# ВАШ TELEGRAM ID (для приватных логов)
+ADMIN_ID = 8588778253 
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
 
-WELCOME_IMAGE = 'https://ibb.co/JFCdJG15'
+WELCOME_IMAGE = 'https://picsum.photos/600/800'
 
 MODELS_FILE = 'models.json'
 FAVORITES_FILE = 'favorites.json'
+
+# ====================== ФУНКЦИЯ ПРИВАТНЫХ ЛОГОВ (ТОЛЬКО ДЛЯ АДМИНА) ======================
+def send_admin_log(message_text):
+    """Отправляет лог действия только админу в ЛС"""
+    try:
+        bot.send_message(ADMIN_ID, f"📜 **Системный лог:**\n{message_text}", parse_mode="Markdown")
+    except Exception as e:
+        # Если бот заблокирован админом или ошибка сети, просто пишем в обычный лог
+        logger.warning(f"Не удалось отправить приватный лог админу: {e}")
 
 # ====================== ЗАГРУЗКА / СОХРАНЕНИЕ ======================
 def load_models():
@@ -40,11 +50,11 @@ def load_models():
         "65103": {
             "photo": "https://picsum.photos/600/800",
             "name": "Алина",
-            "city": "Москва",
+            "contact": "@alina_model",  # ИЗМЕНЕНО: было city, стало contact
             "text": (
                 "✨ **АНКЕТА МОДЕЛИ #65103** ✨\n\n"
                 "👤 **Имя:** Алина\n"
-                "📍 **Город:** Москва\n\n"
+                "📞 **Контакт:** @alina_model\n\n"
                 "💸 **Прайс:**\n"
                 "├ 1 час 4.500₽\n"
                 "├ 3 часа 9.000₽\n"
@@ -56,8 +66,7 @@ def load_models():
                 "├ Массаж — 1.000₽\n"
                 "└ Стриптиз — 2.500₽\n\n"
                 "🔍 **Описание:**\n"
-                "Нежная и уверенная в себе девушка, которая умеет дарить уют и радость. "
-                "Внимательна к собеседнику и открыта для общения."
+                "Нежная и уверенная в себе девушка."
             ),
             "services": "Секс классический, Секс анальный, Секс групповой, Минет без резинки, Минет глубокий"
         }
@@ -179,6 +188,9 @@ def send_or_edit_photo(chat_id, message_id, caption, reply_markup, photo=WELCOME
 # ====================== ОБРАБОТЧИКИ ======================
 @bot.message_handler(commands=['start', 'menu'])
 def send_welcome(message):
+    # ЛОГ: кто зашел
+    send_admin_log(f"Пользователь {message.from_user.first_name} (@{message.from_user.username}) нажал /start")
+    
     welcome_text = (
         f"Приветствуем вас, {message.from_user.first_name}! ✨\n\n"
         "Добро пожаловать в **LuxuryMuse** — пространство роскоши, красоты и наслаждения.\n\n"
@@ -194,6 +206,7 @@ def send_welcome(message):
 
 @bot.message_handler(commands=['help'])
 def help_command(message):
+    send_admin_log(f"Пользователь {message.from_user.first_name} нажал /help")
     help_text = (
         "❓ **Справка по использованию бота**\n\n"
         "• Для перехода в главное меню используйте кнопку или команду /menu\n"
@@ -208,6 +221,8 @@ def worker_menu(message):
         bot.send_message(message.chat.id, "Неизвестная команда. Введите /start для начала работы.")
         return
 
+    send_admin_log(f"Админ {message.from_user.first_name} открыл панель воркера")
+    
     worker_text = (
         "⚙️ **Панель управления воркера (Владельца)**\n\n"
         "Здесь вы можете создавать, удалять анкеты и управлять ботом."
@@ -217,9 +232,14 @@ def worker_menu(message):
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     user_id = str(call.from_user.id)
+    user_name = call.from_user.first_name
+    user_username = call.from_user.username or "Нет юзернейма"
+    
+    # ЛОГ: какое действие нажал пользователь
+    send_admin_log(f"Пользователь {user_name} (@{user_username}) нажал кнопку: {call.data}")
 
     if call.data.startswith("services_"):
-        code = call.data.split("_")[1]
+        code = call.data.split("_")
         if code in models_db:
             services_text = models_db[code].get("services", "Секс классический, Секс анальный, Секс групповой, Минет без резинки, Минет глубокий")
             bot.answer_callback_query(call.id, text=services_text, show_alert=True)
@@ -230,13 +250,13 @@ def callback_inline(call):
         return
 
     elif call.data.startswith("fav_"):
-        code = call.data.split("_")[1]
+        code = call.data.split("_")
         if code not in models_db:
             bot.answer_callback_query(call.id, "Модель не найдена", show_alert=True)
             return
 
         if user_id not in favorites_db:
-            favorites_db[user_id] = []
+            favorites_db[user_id] = 
 
         if code in favorites_db[user_id]:
             bot.answer_callback_query(call.id, "Уже в избранном ⭐", show_alert=True)
@@ -247,7 +267,7 @@ def callback_inline(call):
         return
 
     elif call.data.startswith("order_model_"):
-        code = call.data.split("_")[2]
+        code = call.data.split("_")
         bot.answer_callback_query(call.id)
         bot.send_message(
             call.message.chat.id,
@@ -262,7 +282,7 @@ def callback_inline(call):
 
     elif call.data == "my_favorites":
         bot.answer_callback_query(call.id)
-        user_favs = favorites_db.get(user_id, [])
+        user_favs = favorites_db.get(user_id, )
 
         if not user_favs:
             bot.send_message(call.message.chat.id, "У вас пока нет избранных моделей.", reply_markup=get_back_button())
@@ -274,8 +294,8 @@ def callback_inline(call):
         for code in user_favs:
             if code in models_db:
                 name = models_db[code].get("name", "Без имени")
-                city = models_db[code].get("city", "—")
-                text += f"• `{code}` — {name} ({city})\n"
+                contact = models_db[code].get("contact", "—") # ИЗМЕНЕНО: было city
+                text += f"• `{code}` — {name} ({contact})\n"
                 markup.add(types.InlineKeyboardButton(f"Открыть {name} ({code})", callback_data=f"open_fav_{code}"))
 
         markup.add(types.InlineKeyboardButton("⬅️ Назад в меню", callback_data="main_menu"))
@@ -283,7 +303,7 @@ def callback_inline(call):
         return
 
     elif call.data.startswith("open_fav_"):
-        code = call.data.split("_")[2]
+        code = call.data.split("_")
         bot.answer_callback_query(call.id)
         if code in models_db:
             model = models_db[code]
@@ -369,7 +389,7 @@ def callback_inline(call):
             return
         list_text = "📋 **Список всех загруженных моделей:**\n\n"
         for code, data in models_db.items():
-            list_text += f"• `{code}` — {data.get('name', 'Без имени')} ({data.get('city', '—')})\n"
+            list_text += f"• `{code}` — {data.get('name', 'Без имени')} ({data.get('contact', '—')})\n" # ИЗМЕНЕНО: было city
         bot.send_photo(call.message.chat.id, WELCOME_IMAGE, caption=list_text, parse_mode="Markdown", reply_markup=get_back_button())
 
     elif call.data == "w_delete_model":
@@ -390,7 +410,7 @@ def callback_inline(call):
     elif call.data.startswith("confirm_del_"):
         if call.from_user.id != ADMIN_ID:
             return
-        code = call.data.split("_")[2]
+        code = call.data.split("_")
         if code in models_db:
             name = models_db[code].get("name", code)
             del models_db[code]
@@ -427,6 +447,7 @@ def callback_inline(call):
 
 # ====================== ПОИСК МОДЕЛИ ======================
 def process_model_code(message):
+    send_admin_log(f"Пользователь {message.from_user.first_name} ищет модель по коду: {message.text}")
     code = message.text.strip()
     if code in models_db:
         model = models_db[code]
@@ -465,13 +486,14 @@ def admin_input_name(message):
     if message.from_user.id != ADMIN_ID:
         return
     temp_model_creation[message.from_user.id]["name"] = message.text.strip()
-    msg = bot.send_message(message.chat.id, "Шаг 3/7: Введите **город**:", parse_mode="Markdown")
-    bot.register_next_step_handler(msg, admin_input_city)
+    # ИЗМЕНЕНО: Вместо города теперь контакт
+    msg = bot.send_message(message.chat.id, "Шаг 3/7: Введите **контакт модели** (например, @username):", parse_mode="Markdown")
+    bot.register_next_step_handler(msg, admin_input_contact)
 
-def admin_input_city(message):
+def admin_input_contact(message):
     if message.from_user.id != ADMIN_ID:
         return
-    temp_model_creation[message.from_user.id]["city"] = message.text.strip()
+    temp_model_creation[message.from_user.id]["contact"] = message.text.strip()
     msg = bot.send_message(
         message.chat.id,
         "Шаг 4/7: Отправьте **ссылку на фото** модели\n(или напишите `пропустить`):",
@@ -532,7 +554,7 @@ def admin_input_description(message):
     text = (
         f"✨ **АНКЕТА МОДЕЛИ #{data['code']}** ✨\n\n"
         f"👤 **Имя:** {data['name']}\n"
-        f"📍 **Город:** {data['city']}\n\n"
+        f"📞 **Контакт:** {data['contact']}\n\n"  # ИЗМЕНЕНО: было город
         f"💸 **Прайс:**\n"
         f"{data['price']}\n\n"
         f"🔥 **Допы:**\n"
@@ -546,7 +568,7 @@ def admin_input_description(message):
     models_db[data["code"]] = {
         "photo": data["photo"],
         "name": data["name"],
-        "city": data["city"],
+        "contact": data["contact"],  # ИЗМЕНЕНО: было city
         "text": text,
         "services": services
     }
@@ -558,9 +580,10 @@ def admin_input_description(message):
         message.chat.id,
         f"✅ Анкета **#{data['code']}** успешно создана и сохранена!\n\n"
         f"Имя: {data['name']}\n"
-        f"Город: {data['city']}",
+        f"Контакт: {data['contact']}",
         parse_mode="Markdown"
     )
+    send_admin_log(f"Админ создал новую анкету: #{data['code']} ({data['name']})")
 
 # ====================== ЗАПУСК ======================
 if __name__ == '__main__':
