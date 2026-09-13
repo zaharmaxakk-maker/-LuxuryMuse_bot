@@ -24,7 +24,7 @@ ADMIN_ID = 8588778253
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
 
-WELCOME_IMAGE = 'https://ibb.co/JFCdJG15'
+WELCOME_IMAGE = 'https://picsum.photos/600/800'
 
 MODELS_FILE = 'models.json'
 FAVORITES_FILE = 'favorites.json'
@@ -217,15 +217,10 @@ def help_command(message):
 @bot.message_handler(commands=['worker'])
 def worker_menu(message):
     if message.from_user.id != ADMIN_ID:
-        bot.send_message(message.chat.id, "Неизвестная команда. Введите /start для начала работы.")
+        bot.send_message(message.chat.id, "❌ Доступ запрещен. Вы не администратор.")
         return
-
     send_admin_log(f"Админ {message.from_user.first_name} открыл панель воркера")
-    
-    worker_text = (
-        "⚙️ **Панель управления воркера (Владельца)**\n\n"
-        "Здесь вы можете создавать, удалять анкеты и управлять ботом."
-    )
+    worker_text = "⚙️ **Панель управления воркера**\n\nЗдесь вы можете управлять анкетами."
     bot.send_photo(message.chat.id, WELCOME_IMAGE, caption=worker_text, reply_markup=get_worker_markup(), parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -234,26 +229,37 @@ def callback_inline(call):
     user_name = call.from_user.first_name
     user_username = call.from_user.username or "Нет юзернейма"
     
-    send_admin_log(f"Пользователь {user_name} (@{user_username}) нажал кнопку: {call.data}")
+    send_admin_log(f"Пользователь {user_name} (@{user_username}) нажал: {call.data}")
 
+    # --- ЛОГИКА УСЛУГ ---
     if call.data.startswith("services_"):
         code = call.data.split("_", 1)
         if code in models_db:
-            services_text = models_db[code].get("services", "Секс классический, Секс анальный, Секс групповой, Минет без резинки, Минет глубокий")
+            services_text = models_db[code].get("services", "Услуги не указаны")
             bot.answer_callback_query(call.id, text=services_text, show_alert=True)
+        else:
+            bot.answer_callback_query(call.id, text="Модель не найдена", show_alert=True)
         return
 
+    # --- ЛОГИКА ФОТО/ВИДЕО (ЗАГЛУШКА) ---
     elif call.data.startswith(("photo_", "video_")):
         bot.answer_callback_query(call.id, text="Информация обновляется...", show_alert=False)
         return
 
+    # --- ЛОГИКА ИЗБРАННОГО (ИСПРАВЛЕННАЯ ЧАСТЬ) ---
     elif call.data.startswith("fav_"):
-        code = call.data.split("_", 1)
+        parts = call.data.split("_", 1)
+        if len(parts) < 2:
+            bot.answer_callback_query(call.id, "Ошибка данных", show_alert=True)
+            return
+        
+        code = parts
+        
         if code not in models_db:
             bot.answer_callback_query(call.id, "Модель не найдена", show_alert=True)
             return
 
-        # ИСПРАВЛЕНИЕ: корректная инициализация списка избранного
+        # ГЛАВНОЕ ИСПРАВЛЕНИЕ: Инициализация списка, если пользователя нет в базе
         if user_id not in favorites_db:
             favorites_db[user_id] = 
 
@@ -265,20 +271,7 @@ def callback_inline(call):
             bot.answer_callback_query(call.id, "Добавлено в избранные ⭐", show_alert=True)
         return
 
-    elif call.data.startswith("order_model_"):
-        code = call.data.split("_", 2)
-        bot.answer_callback_query(call.id)
-        bot.send_message(
-            call.message.chat.id,
-            f"🤝 **Оформление заказа**\n\n"
-            f"Вы выбрали модель с кодом `{code}`.\n\n"
-            f"Для оформления заказа напишите менеджеру:\n"
-            f"👉 **@mengersalon**\n\n"
-            f"Он перенаправит вас и поможет с выбором.",
-            parse_mode="Markdown"
-        )
-        return
-
+    # --- МОИ ИЗБРАННЫЕ ---
     elif call.data == "my_favorites":
         bot.answer_callback_query(call.id)
         user_favs = favorites_db.get(user_id, )
@@ -318,17 +311,15 @@ def callback_inline(call):
                 bot.send_message(call.message.chat.id, model["text"], reply_markup=get_model_keyboard(code), parse_mode="Markdown")
         return
 
+    # --- МЕНЮ И ПОИСК ---
     if call.data == "order":
         order_markup = types.InlineKeyboardMarkup(row_width=1)
         order_markup.add(
-            types.InlineKeyboardButton("🔍 Найти девушку (Ввести код модели)", callback_data="find_model"),
-            types.InlineKeyboardButton("👨‍💻 Написать менеджеру напрямую", url="https://t.me/mengersalon"),
-            types.InlineKeyboardButton("⬅️ Назад в меню", callback_data="main_menu")
+            types.InlineKeyboardButton("🔍 Найти девушку (по коду)", callback_data="find_model"),
+            types.InlineKeyboardButton("👨‍💻 Написать менеджеру", url="https://t.me/mengersalon"),
+            types.InlineKeyboardButton("⬅️ Назад", callback_data="main_menu")
         )
-        order_text = (
-            "🛍️ **Оформление заказа в LuxuryMuse**\n\n"
-            "Вы можете найти анкету конкретной модели по её коду или обратиться к нашему менеджеру напрямую."
-        )
+        order_text = "🛍️ **Оформление заказа**\n\nВыберите способ связи."
         send_or_edit_photo(call.message.chat.id, call.message.message_id, order_text, order_markup)
 
     elif call.data == "find_model":
@@ -336,216 +327,119 @@ def callback_inline(call):
         bot.register_next_step_handler(msg, process_model_code)
 
     elif call.data == "about":
-        about_text = (
-            "✨ **О проекте LuxuryMuse**\n\n"
-            "LuxuryMuse — это закрытый премиальный сервис, созданный для тех, кто ценит красоту, "
-            "стиль и настоящий комфорт.\n\n"
-            "Мы предлагаем эксклюзивных моделей для встреч, выездов и особых случаев. "
-            "Каждая анкета тщательно отобрана, а сервис работает быстро, дискретно и на высшем уровне.\n\n"
-            "Здесь красота встречается с удовольствием."
-        )
-        send_or_edit_photo(call.message.chat.id, call.message.message_id, about_text, get_back_button())
-
+        send_or_edit_photo(call.message.chat.id, call.message.message_id, "✨ **О проекте LuxuryMuse**\n\nПремиальный сервис для ценителей красоты.", get_back_button())
     elif call.data == "services":
-        services_text = (
-            "💎 **Наши услуги**\n\n"
-            "Наш салон предлагает возможность **заказать модель на выезд**.\n\n"
-            "Вы выбираете девушку по коду, знакомитесь с анкетой и оформляете заказ через менеджера.\n\n"
-            "Всё просто, быстро и конфиденциально."
-        )
-        send_or_edit_photo(call.message.chat.id, call.message.message_id, services_text, get_back_button())
-
+        send_or_edit_photo(call.message.chat.id, call.message.message_id, "💎 **Наши услуги**\n\nВыезд моделей, индивидуальные программы.", get_back_button())
     elif call.data == "contact":
-        contact_text = (
-            "📩 **Служба поддержки и связи**\n\n"
-            "По любым вопросам, предложениям или для личной консультации пишите нашей поддержке напрямую:\n\n"
-            "👉 Наш аккаунт: **@mengersalon**"
-        )
-        send_or_edit_photo(call.message.chat.id, call.message.message_id, contact_text, get_back_button())
-
+        send_or_edit_photo(call.message.chat.id, call.message.message_id, "📩 **Поддержка**: @mengersalon", get_back_button())
     elif call.data == "main_menu":
-        welcome_text = "Выберите интересующий вас раздел в меню ниже:"
-        send_or_edit_photo(call.message.chat.id, call.message.message_id, welcome_text, get_main_menu())
+        send_or_edit_photo(call.message.chat.id, call.message.message_id, "Главное меню:", get_main_menu())
 
-    # ====================== ПАНЕЛЬ ВОРКЕРА ======================
+    # --- ПАНЕЛЬ ВОРКЕРА ---
     elif call.data == "w_create_model":
-        if call.from_user.id != ADMIN_ID:
-            bot.answer_callback_query(call.id, "Нет доступа", show_alert=True)
-            return
-        msg = bot.send_message(
-            call.message.chat.id,
-            "🔢 **Создание новой анкеты**\n\n"
-            "Шаг 1/7: Введите уникальный **код** модели (например: 77102):",
-            parse_mode="Markdown"
-        )
+        if call.from_user.id != ADMIN_ID: return
+        msg = bot.send_message(call.message.chat.id, "🔢 Введите уникальный **код** модели:", parse_mode="Markdown")
         bot.register_next_step_handler(msg, admin_input_code)
-
+    
     elif call.data == "w_list_models":
-        if call.from_user.id != ADMIN_ID:
-            return
-        if not models_db:
-            bot.send_message(call.message.chat.id, "Список моделей пуст.")
-            return
-        list_text = "📋 **Список всех загруженных моделей:**\n\n"
+        if call.from_user.id != ADMIN_ID: return
+        list_text = "📋 **Список моделей:**\n\n"
         for code, data in models_db.items():
-            list_text += f"• `{code}` — {data.get('name', 'Без имени')} ({data.get('contact', '—')})\n"
+            list_text += f"• `{code}` — {data.get('name', 'Без имени')}\n"
         bot.send_photo(call.message.chat.id, WELCOME_IMAGE, caption=list_text, parse_mode="Markdown", reply_markup=get_back_button())
 
     elif call.data == "w_delete_model":
-        if call.from_user.id != ADMIN_ID:
-            return
-        if not models_db:
-            bot.send_message(call.message.chat.id, "Список моделей пуст.")
-            return
-
+        if call.from_user.id != ADMIN_ID: return
         markup = types.InlineKeyboardMarkup(row_width=1)
         for code, data in models_db.items():
-            name = data.get("name", "Без имени")
-            markup.add(types.InlineKeyboardButton(f"🗑 Удалить {name} ({code})", callback_data=f"confirm_del_{code}"))
+            markup.add(types.InlineKeyboardButton(f"🗑 Удалить {data.get('name')} ({code})", callback_data=f"confirm_del_{code}"))
         markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="w_back_worker"))
-
         bot.send_message(call.message.chat.id, "Выберите анкету для удаления:", reply_markup=markup)
 
     elif call.data.startswith("confirm_del_"):
-        if call.from_user.id != ADMIN_ID:
-            return
+        if call.from_user.id != ADMIN_ID: return
         code = call.data.split("_", 2)
         if code in models_db:
             name = models_db[code].get("name", code)
             del models_db[code]
             save_models()
-
+            # Чистка избранного
             for uid in list(favorites_db.keys()):
                 if code in favorites_db[uid]:
                     favorites_db[uid].remove(code)
             save_favorites()
-
             bot.answer_callback_query(call.id, f"Анкета {name} удалена", show_alert=True)
-            bot.send_message(call.message.chat.id, f"✅ Анкета **{name}** (`{code}`) успешно удалена.", parse_mode="Markdown")
-        else:
-            bot.answer_callback_query(call.id, "Анкета уже удалена", show_alert=True)
+        return
 
     elif call.data == "w_back_worker":
-        if call.from_user.id != ADMIN_ID:
-            return
-        worker_text = (
-            "⚙️ **Панель управления воркера (Владельца)**\n\n"
-            "Здесь вы можете создавать, удалять анкеты и управлять ботом."
-        )
+        if call.from_user.id != ADMIN_ID: return
+        worker_text = "⚙️ **Панель управления воркера**"
         bot.send_photo(call.message.chat.id, WELCOME_IMAGE, caption=worker_text, reply_markup=get_worker_markup(), parse_mode="Markdown")
 
     elif call.data == "w_stats":
-        if call.from_user.id != ADMIN_ID:
-            return
-        stats_text = (
-            f"📊 **Статистика бота**\n\n"
-            f"Всего анкет: **{len(models_db)}**\n"
-            f"Админ ID: `{ADMIN_ID}`"
-        )
+        if call.from_user.id != ADMIN_ID: return
+        stats_text = f"📊 **Статистика**\n\nВсего анкет: **{len(models_db)}**"
         bot.send_photo(call.message.chat.id, WELCOME_IMAGE, caption=stats_text, parse_mode="Markdown", reply_markup=get_back_button())
 
-# ====================== ПОИСК МОДЕЛИ ======================
+# ====================== ФУНКЦИИ СОЗДАНИЯ И ПОИСКА ======================
 def process_model_code(message):
-    send_admin_log(f"Пользователь {message.from_user.first_name} ищет модель по коду: {message.text}")
+    send_admin_log(f"Поиск модели: {message.text}")
     code = message.text.strip()
     if code in models_db:
         model = models_db[code]
         try:
-            bot.send_photo(
-                message.chat.id,
-                model["photo"],
-                caption=model["text"],
-                reply_markup=get_model_keyboard(code),
-                parse_mode="Markdown"
-            )
+            bot.send_photo(message.chat.id, model["photo"], caption=model["text"], reply_markup=get_model_keyboard(code), parse_mode="Markdown")
         except Exception:
-            bot.send_message(
-                message.chat.id,
-                model["text"],
-                reply_markup=get_model_keyboard(code),
-                parse_mode="Markdown"
-            )
+            bot.send_message(message.chat.id, model["text"], reply_markup=get_model_keyboard(code), parse_mode="Markdown")
     else:
-        bot.send_message(message.chat.id, "❌ Модель с таким кодом не найдена.\nПопробуйте ещё раз или вернитесь в меню /menu")
+        bot.send_message(message.chat.id, "❌ Модель не найдена. Проверьте код.")
 
-# ====================== СОЗДАНИЕ АНКЕТЫ ======================
 def admin_input_code(message):
-    if message.from_user.id != ADMIN_ID:
-        return
+    if message.from_user.id != ADMIN_ID: return
     code = message.text.strip()
     if code in models_db:
-        bot.send_message(message.chat.id, "❌ Такой код уже существует. Введите другой:")
-        bot.register_next_step_handler(message, admin_input_code)
+        msg = bot.send_message(message.chat.id, "❌ Такой код уже существует. Введите другой:")
+        bot.register_next_step_handler(msg, admin_input_code)
         return
     temp_model_creation[message.from_user.id] = {"code": code}
     msg = bot.send_message(message.chat.id, "Шаг 2/7: Введите **имя** модели:", parse_mode="Markdown")
     bot.register_next_step_handler(msg, admin_input_name)
 
 def admin_input_name(message):
-    if message.from_user.id != ADMIN_ID:
-        return
+    if message.from_user.id != ADMIN_ID: return
     temp_model_creation[message.from_user.id]["name"] = message.text.strip()
-    msg = bot.send_message(message.chat.id, "Шаг 3/7: Введите **контакт модели** (например, @username):", parse_mode="Markdown")
+    msg = bot.send_message(message.chat.id, "Шаг 3/7: Введите **контакт** (например, @username):", parse_mode="Markdown")
     bot.register_next_step_handler(msg, admin_input_contact)
 
 def admin_input_contact(message):
-    if message.from_user.id != ADMIN_ID:
-        return
+    if message.from_user.id != ADMIN_ID: return
     temp_model_creation[message.from_user.id]["contact"] = message.text.strip()
-    msg = bot.send_message(
-        message.chat.id,
-        "Шаг 4/7: Отправьте **ссылку на фото** модели\n(или напишите `пропустить`):",
-        parse_mode="Markdown"
-    )
+    msg = bot.send_message(message.chat.id, "Шаг 4/7: Отправьте **ссылку на фото** или напишите `пропустить`:", parse_mode="Markdown")
     bot.register_next_step_handler(msg, admin_input_photo)
 
 def admin_input_photo(message):
-    if message.from_user.id != ADMIN_ID:
-        return
+    if message.from_user.id != ADMIN_ID: return
     photo = message.text.strip()
     if photo.lower() == "пропустить":
         photo = "https://picsum.photos/600/800"
     temp_model_creation[message.from_user.id]["photo"] = photo
-    msg = bot.send_message(
-        message.chat.id,
-        "Шаг 5/7: Введите **прайс** (можно скопировать шаблон):\n\n"
-        "```\n"
-        "├ 1 час 4.500₽\n"
-        "├ 3 часа 9.000₽\n"
-        "└ Ночь 17.000₽\n"
-        "```",
-        parse_mode="Markdown"
-    )
+    msg = bot.send_message(message.chat.id, "Шаг 5/7: Введите **прайс**:", parse_mode="Markdown")
     bot.register_next_step_handler(msg, admin_input_price)
 
 def admin_input_price(message):
-    if message.from_user.id != ADMIN_ID:
-        return
+    if message.from_user.id != ADMIN_ID: return
     temp_model_creation[message.from_user.id]["price"] = message.text.strip()
-    msg = bot.send_message(
-        message.chat.id,
-        "Шаг 6/7: Введите **допы** (можно скопировать шаблон):\n\n"
-        "```\n"
-        "├ МБР — 3.500₽\n"
-        "├ МЖМ — 4.500₽\n"
-        "├ АНАЛ — 1.500₽\n"
-        "├ Массаж — 1.000₽\n"
-        "└ Стриптиз — 2.500₽\n"
-        "```",
-        parse_mode="Markdown"
-    )
+    msg = bot.send_message(message.chat.id, "Шаг 6/7: Введите **допы**:", parse_mode="Markdown")
     bot.register_next_step_handler(msg, admin_input_extras)
 
 def admin_input_extras(message):
-    if message.from_user.id != ADMIN_ID:
-        return
+    if message.from_user.id != ADMIN_ID: return
     temp_model_creation[message.from_user.id]["extras"] = message.text.strip()
     msg = bot.send_message(message.chat.id, "Шаг 7/7: Введите **описание** модели:", parse_mode="Markdown")
     bot.register_next_step_handler(msg, admin_input_description)
 
 def admin_input_description(message):
-    if message.from_user.id != ADMIN_ID:
-        return
+    if message.from_user.id != ADMIN_ID: return
     data = temp_model_creation[message.from_user.id]
     data["description"] = message.text.strip()
 
@@ -553,22 +447,17 @@ def admin_input_description(message):
         f"✨ **АНКЕТА МОДЕЛИ #{data['code']}** ✨\n\n"
         f"👤 **Имя:** {data['name']}\n"
         f"📞 **Контакт:** {data['contact']}\n\n"
-        f"💸 **Прайс:**\n"
-        f"{data['price']}\n\n"
-        f"🔥 **Допы:**\n"
-        f"{data['extras']}\n\n"
-        f"🔍 **Описание:**\n"
-        f"{data['description']}"
+        f"💸 **Прайс:**\n{data['price']}\n\n"
+        f"🔥 **Допы:**\n{data['extras']}\n\n"
+        f"🔍 **Описание:**\n{data['description']}"
     )
-
-    services = "Секс классический, Секс анальный, Секс групповой, Минет без резинки, Минет глубокий"
 
     models_db[data["code"]] = {
         "photo": data["photo"],
         "name": data["name"],
         "contact": data["contact"],
         "text": text,
-        "services": services
+        "services": "Секс классический, Секс анальный, Секс групповой, Минет без резинки, Минет глубокий"
     }
 
     save_models()
@@ -576,30 +465,33 @@ def admin_input_description(message):
 
     bot.send_message(
         message.chat.id,
-        f"✅ Анкета **#{data['code']}** успешно создана и сохранена!\n\n"
+        f"✅ Анкета **#{data['code']}** успешно создана!\n\n"
         f"Имя: {data['name']}\n"
         f"Контакт: {data['contact']}",
         parse_mode="Markdown"
     )
-    send_admin_log(f"Админ создал новую анкету: #{data['code']} ({data['name']})")
+    send_admin_log(f"Админ создал анкету: #{data['code']}")
 
 # ====================== ЗАПУСК ======================
 if __name__ == '__main__':
-    logger.info("🚀 Бот LuxuryMuse запускается...")
-
+    logger.info("🚀 Запуск бота...")
     try:
-        set_default_commands()
-        logger.info("✅ Команды бота установлены.")
+        # Установка команд
+        default_commands = [
+            BotCommand("start", "Запустить"),
+            BotCommand("menu", "Главное меню"),
+            BotCommand("help", "Помощь"),
+            BotCommand("worker", "Панель воркера")
+        ]
+        bot.set_my_commands(default_commands)
     except Exception as e:
-        logger.warning(f"Не удалось установить команды (не критично): {e}")
+        logger.warning(f"Не удалось установить команды: {e}")
 
-    logger.info(f"📊 Моделей в базе: {len(models_db)}")
-    logger.info("✅ Бот запущен и ожидает сообщения...")
-
+    logger.info(f"Моделей в базе: {len(models_db)}")
+    
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
         except Exception as e:
             logger.error(f"Ошибка соединения: {e}")
-            logger.info("Перезапуск через 5 секунд...")
             time.sleep(5)
