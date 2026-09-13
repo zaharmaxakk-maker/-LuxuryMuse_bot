@@ -4,25 +4,38 @@ from telebot.types import BotCommand, BotCommandScopeDefault, BotCommandScopeCha
 import json
 import os
 import time
+import logging
+
+# ====================== ЛОГИРОВАНИЕ ======================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # ====================== НАСТРОЙКИ ======================
-BOT_TOKEN = '8785911758:AAHkVKAiAGqoGTF2B-qjdSughGsDaIs6E00'
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    logger.error("Переменная окружения BOT_TOKEN не задана! Установите её в Railway → Variables")
+    raise ValueError("BOT_TOKEN не найден в переменных окружения")
+
 ADMIN_ID = 8588778253
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
 
-# Главное фото (логотип)
 WELCOME_IMAGE = 'https://ibb.co/JFCdJG15'
 
-# Файлы для сохранения
 MODELS_FILE = 'models.json'
 FAVORITES_FILE = 'favorites.json'
 
 # ====================== ЗАГРУЗКА / СОХРАНЕНИЕ ======================
 def load_models():
     if os.path.exists(MODELS_FILE):
-        with open(MODELS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(MODELS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, Exception) as e:
+            logger.warning(f"Ошибка при загрузке models.json: {e}. Используем дефолтные данные.")
     return {
         "65103": {
             "photo": "https://picsum.photos/600/800",
@@ -43,29 +56,42 @@ def load_models():
                 "├ Массаж — 1.000₽\n"
                 "└ Стриптиз — 2.500₽\n\n"
                 "🔍 **Описание:**\n"
-                "Нежная и уверенная в себе девушка, которая умеет дарить уют и радость. Внимательна к собеседнику и открыта для общения."
+                "Нежная и уверенная в себе девушка, которая умеет дарить уют и радость. "
+                "Внимательна к собеседнику и открыта для общения."
             ),
             "services": "Секс классический, Секс анальный, Секс групповой, Минет без резинки, Минет глубокий"
         }
     }
 
 def save_models():
-    with open(MODELS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(models_db, f, ensure_ascii=False, indent=2)
+    try:
+        with open(MODELS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(models_db, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении models.json: {e}")
 
 def load_favorites():
     if os.path.exists(FAVORITES_FILE):
-        with open(FAVORITES_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(FAVORITES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, Exception) as e:
+            logger.warning(f"Ошибка при загрузке favorites.json: {e}. Создаём пустой файл.")
     return {}
 
 def save_favorites():
-    with open(FAVORITES_FILE, 'w', encoding='utf-8') as f:
-        json.dump(favorites_db, f, ensure_ascii=False, indent=2)
+    try:
+        with open(FAVORITES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(favorites_db, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении favorites.json: {e}")
 
 models_db = load_models()
 favorites_db = load_favorites()
 temp_model_creation = {}
+
+logger.info(f"Загружено моделей: {len(models_db)}")
+logger.info(f"Загружено избранных пользователей: {len(favorites_db)}")
 
 # ====================== КОМАНДЫ ======================
 def set_default_commands():
@@ -82,7 +108,7 @@ def set_default_commands():
     try:
         bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
     except Exception as e:
-        print(f"Не удалось установить команды для админа: {e}")
+        logger.warning(f"Не удалось установить команды для админа: {e}")
 
 # ====================== КЛАВИАТУРЫ ======================
 def get_model_keyboard(code):
@@ -536,23 +562,23 @@ def admin_input_description(message):
         parse_mode="Markdown"
     )
 
-# ====================== ЗАПУСК (максимально устойчивый) ======================
+# ====================== ЗАПУСК ======================
 if __name__ == '__main__':
-    print("Запуск бота...")
+    logger.info("🚀 Бот LuxuryMuse запускается...")
 
-    # Пытаемся установить команды, но не падаем, если не получилось
     try:
         set_default_commands()
-        print("Команды установлены.")
+        logger.info("✅ Команды бота установлены.")
     except Exception as e:
-        print(f"Не удалось установить команды (это не критично): {e}")
+        logger.warning(f"Не удалось установить команды (не критично): {e}")
 
-    print("Бот запущен и ожидает сообщения...")
+    logger.info(f"📊 Моделей в базе: {len(models_db)}")
+    logger.info("✅ Бот запущен и ожидает сообщения...")
 
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
         except Exception as e:
-            print(f"\nОшибка соединения: {e}")
-            print("Перезапуск через 5 секунд...")
+            logger.error(f"Ошибка соединения: {e}")
+            logger.info("Перезапуск через 5 секунд...")
             time.sleep(5)
