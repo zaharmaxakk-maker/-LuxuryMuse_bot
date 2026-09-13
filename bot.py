@@ -19,19 +19,15 @@ if not BOT_TOKEN:
     logger.error("Переменная окружения BOT_TOKEN не задана! Установите её в Railway → Variables")
     raise ValueError("BOT_TOKEN не найден в переменных окружения")
 
-# ВАШ TELEGRAM ID (для приватных логов)
 ADMIN_ID = 8588778253 
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
-
 WELCOME_IMAGE = 'https://picsum.photos'
-
 MODELS_FILE = 'models.json'
 FAVORITES_FILE = 'favorites.json'
 
 # ====================== ФУНКЦИЯ ПРИВАТНЫХ ЛОГОВ ======================
 def send_admin_log(message_text):
-    """Отправляет лог действия только админу в ЛС"""
     try:
         bot.send_message(ADMIN_ID, f"📜 **Системный лог:**\n{message_text}", parse_mode="Markdown")
     except Exception as e:
@@ -98,10 +94,7 @@ models_db = load_models()
 favorites_db = load_favorites()
 temp_model_creation = {}
 
-logger.info(f"Загружено моделей: {len(models_db)}")
-logger.info(f"Загружено избранных пользователей: {len(favorites_db)}")
-
-# ====================== КОМАНДЫ ======================
+# ====================== КОМАНДЫ И МЕНЮ ======================
 def set_default_commands():
     default_commands = [
         BotCommand("start", "🚀 Запустить / В главное меню"),
@@ -109,32 +102,18 @@ def set_default_commands():
         BotCommand("help", "❓ Помощь / Поддержка"),
     ]
     bot.set_my_commands(default_commands, scope=BotCommandScopeDefault())
-
-    admin_commands = default_commands + [
-        BotCommand("worker", "⚙️ Панель воркера")
-    ]
     try:
-        bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+        bot.set_my_commands(default_commands + [BotCommand("worker", "⚙️ Панель воркера")], scope=BotCommandScopeChat(chat_id=ADMIN_ID))
     except Exception as e:
         logger.warning(f"Не удалось установить команды для админа: {e}")
 
-# ====================== КЛАВИАТУРЫ ======================
 def get_model_keyboard(code):
     markup = types.InlineKeyboardMarkup(row_width=2)
-    btn_order = types.InlineKeyboardButton("🤝 Оформить", callback_data=f"order_model_{code}")
-    btn_photo = types.InlineKeyboardButton("🖼️ Другое фото", callback_data=f"photo_{code}")
-    btn_full_photo = types.InlineKeyboardButton("🔞 Фото", callback_data=f"photo_{code}")
-    btn_video = types.InlineKeyboardButton("🔞 Видео", callback_data=f"video_{code}")
-    btn_fav = types.InlineKeyboardButton("⭐ Добавить в избранные", callback_data=f"fav_{code}")
-    btn_reviews = types.InlineKeyboardButton("💬 Отзывы", url="https://t.me")
-    btn_services = types.InlineKeyboardButton("🔲 Услуги", callback_data=f"services_{code}")
-    btn_back = types.InlineKeyboardButton("🏠 Назад", callback_data="main_menu")
-
-    markup.add(btn_order, btn_photo)
-    markup.add(btn_full_photo, btn_video)
-    markup.add(btn_fav)
-    markup.add(btn_reviews, btn_services)
-    markup.add(btn_back)
+    markup.add(types.InlineKeyboardButton("🤝 Оформить", callback_data=f"order_model_{code}"), types.InlineKeyboardButton("🖼️ Другое фото", callback_data=f"photo_{code}"))
+    markup.add(types.InlineKeyboardButton("🔞 Фото", callback_data=f"photo_{code}"), types.InlineKeyboardButton("🔞 Видео", callback_data=f"video_{code}"))
+    markup.add(types.InlineKeyboardButton("⭐ Добавить в избранные", callback_data=f"fav_{code}"))
+    markup.add(types.InlineKeyboardButton("💬 Отзывы", url="https://t.me"), types.InlineKeyboardButton("🔲 Услуги", callback_data=f"services_{code}"))
+    markup.add(types.InlineKeyboardButton("🏠 Назад", callback_data="main_menu"))
     return markup
 
 def get_main_menu():
@@ -163,24 +142,12 @@ def get_worker_markup():
     )
     return markup
 
-# ====================== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ======================
 def send_or_edit_photo(chat_id, message_id, caption, reply_markup, photo=WELCOME_IMAGE):
     try:
-        bot.edit_message_media(
-            media=types.InputMediaPhoto(photo, caption=caption, parse_mode="Markdown"),
-            chat_id=chat_id,
-            message_id=message_id,
-            reply_markup=reply_markup
-        )
+        bot.edit_message_media(media=types.InputMediaPhoto(photo, caption=caption, parse_mode="Markdown"), chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
     except Exception:
         try:
-            bot.edit_message_caption(
-                chat_id=chat_id,
-                message_id=message_id,
-                caption=caption,
-                reply_markup=reply_markup,
-                parse_mode="Markdown"
-            )
+            bot.edit_message_caption(chat_id=chat_id, message_id=message_id, caption=caption, reply_markup=reply_markup, parse_mode="Markdown")
         except Exception:
             bot.send_photo(chat_id, photo, caption=caption, reply_markup=reply_markup, parse_mode="Markdown")
 
@@ -188,25 +155,12 @@ def send_or_edit_photo(chat_id, message_id, caption, reply_markup, photo=WELCOME
 @bot.message_handler(commands=['start', 'menu'])
 def send_welcome(message):
     send_admin_log(f"Пользователь {message.from_user.first_name} (@{message.from_user.username}) нажал /start")
-    
-    welcome_text = (
-        f"Приветствуем вас, {message.from_user.first_name}! ✨\n\n"
-        "Добро пожаловать в **LuxuryMuse** — пространство роскоши, красоты и наслаждения.\n\n"
-        "Выберите интересующий вас раздел в меню ниже:"
-    )
-    bot.send_photo(
-        message.chat.id,
-        WELCOME_IMAGE,
-        caption=welcome_text,
-        reply_markup=get_main_menu(),
-        parse_mode="Markdown"
-    )
+    welcome_text = f"Приветствуем вас, {message.from_user.first_name}! ✨\n\nДобро пожаловать в **LuxuryMuse** — пространство роскоши, красоты и наслаждения.\n\nВыберите интересующий вас раздел в меню ниже:"
+    bot.send_photo(message.chat.id, WELCOME_IMAGE, caption=welcome_text, reply_markup=get_main_menu(), parse_mode="Markdown")
 
 @bot.message_handler(commands=['help'])
 def help_command(message):
-    send_admin_log(f"Пользователь {message.from_user.first_name} открыл помощь.")
-    help_text = "❓ **Поддержка LuxuryMuse**\n\nЕсли у вас возникли вопросы, свяжитесь с нашим администратором."
-    bot.send_message(message.chat.id, help_text, reply_markup=get_back_button())
+    bot.send_message(message.chat.id, "❓ **Поддержка LuxuryMuse**\n\nЕсли у вас возникли вопросы, свяжитесь с нашим администратором.", reply_markup=get_back_button())
 
 @bot.message_handler(commands=['worker'])
 def worker_panel(message):
@@ -215,26 +169,35 @@ def worker_panel(message):
     else:
         bot.send_message(message.chat.id, "❌ У вас нет доступа к этой команде.")
 
-# ====================== ОБРАБОТЧИК КНОПОК (CALLBACK) ======================
+# ====================== БЕЗОПАСНЫЙ ОБРАБОТЧИК КНОПОК ======================
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callbacks(call):
     chat_id = call.message.chat.id
     message_id = call.message.message_id
     
-    # Сбрасываем анимацию загрузки на кнопке
     try:
         bot.answer_callback_query(call.id)
     except Exception:
         pass
 
+    # Обработка динамических кнопок добавления в избранное
+    if call.data.startswith("fav_"):
+        code = call.data.replace("fav_", "")
+        user_id = str(call.from_user.id)
+        if user_id not in favorites_db:
+            favorites_db[user_id] = []
+        if code not in favorites_db[user_id]:
+            favorites_db[user_id].append(code)
+            save_favorites()
+            bot.send_message(chat_id, f"✅ Модель #{code} добавлена в избранное!")
+        else:
+            bot.send_message(chat_id, f"ℹ️ Модель #{code} уже находится в избранном.")
+        return
+
+    # Обработка статичных переходов меню
     if call.data == "main_menu":
-        welcome_text = (
-            f"Приветствуем вас! ✨\n\n"
-            "Добро пожаловать в **LuxuryMuse** — пространство роскоши, красоты и наслаждения.\n\n"
-            "Выберите интересующий вас раздел в меню ниже:"
-        )
+        welcome_text = "Приветствуем вас! ✨\n\nДобро пожаловать в **LuxuryMuse** — пространство роскоши, красоты и наслаждения.\n\nВыберите раздел:"
         send_or_edit_photo(chat_id, message_id, welcome_text, get_main_menu())
-        
     elif call.data == "order":
         if models_db:
             first_code = list(models_db.keys())[0]
@@ -242,8 +205,13 @@ def handle_callbacks(call):
             send_or_edit_photo(chat_id, message_id, model["text"], get_model_keyboard(first_code), photo=model["photo"])
         else:
             bot.send_message(chat_id, "😔 В базе пока нет доступных моделей.", reply_markup=get_back_button())
-            
     elif call.data == "about":
         bot.send_message(chat_id, "✨ **LuxuryMuse** — это премиальное агентство.\nМы предоставляем лучший сервис.", reply_markup=get_back_button())
-        
     elif call.data == "services":
+        bot.send_message(chat_id, "💎 **Наши услуги:**\n\nИндивидуальный подход к каждому клиенту.", reply_markup=get_back_button())
+    elif call.data == "contact":
+        bot.send_message(chat_id, "📩 **Связь с нами:**\n\nПо всем вопросам: @luxury_manager", reply_markup=get_back_button())
+    elif call.data == "my_favorites":
+        user_id = str(call.from_user.id)
+        user_favs = favorites_db.get(user_id, [])
+        if not user_favs:
