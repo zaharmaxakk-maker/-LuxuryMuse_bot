@@ -13,6 +13,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def log_user_action(user, action, extra=""):
+    username = f"@{user.username}" if user.username else "без username"
+    name = user.first_name or ""
+    line = f"👤 Пользователь: {name} ({username}) | ID: {user.id} | Действие: {action}"
+    if extra:
+        line += f" | {extra}"
+    logger.info(line)
+    if user.id != ADMIN_ID:
+        try:
+            bot.send_message(ADMIN_ID, line)
+        except Exception as e:
+            logger.warning(f"Не удалось отправить лог админу: {e}")
+
 # ====================== НАСТРОЙКИ ======================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -179,6 +192,7 @@ def send_or_edit_photo(chat_id, message_id, caption, reply_markup, photo=WELCOME
 # ====================== ОБРАБОТЧИКИ ======================
 @bot.message_handler(commands=['start', 'menu'])
 def send_welcome(message):
+    log_user_action(message.from_user, "/start или /menu", f"chat_id={message.chat.id}")
     welcome_text = (
         f"Приветствуем вас, {message.from_user.first_name}! ✨\n\n"
         "Добро пожаловать в **LuxuryMuse** — пространство роскоши, красоты и наслаждения.\n\n"
@@ -194,6 +208,7 @@ def send_welcome(message):
 
 @bot.message_handler(commands=['help'])
 def help_command(message):
+    log_user_action(message.from_user, "/help")
     help_text = (
         "❓ **Справка по использованию бота**\n\n"
         "• Для перехода в главное меню используйте кнопку или команду /menu\n"
@@ -204,6 +219,7 @@ def help_command(message):
 
 @bot.message_handler(commands=['worker'])
 def worker_menu(message):
+    log_user_action(message.from_user, "/worker")
     if message.from_user.id != ADMIN_ID:
         bot.send_message(message.chat.id, "Неизвестная команда. Введите /start для начала работы.")
         return
@@ -217,6 +233,7 @@ def worker_menu(message):
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     user_id = str(call.from_user.id)
+    log_user_action(call.from_user, f"нажата кнопка: {call.data}")
 
     if call.data.startswith("services_"):
         code = call.data.split("_")[1]
@@ -274,8 +291,8 @@ def callback_inline(call):
         for code in user_favs:
             if code in models_db:
                 name = models_db[code].get("name", "Без имени")
-                city = models_db[code].get("city", "—")
-                text += f"• `{code}` — {name} ({city})\n"
+                contact = models_db[code].get("contact", models_db[code].get("city", "—"))
+                text += f"• `{code}` — {name} ({contact})\n"
                 markup.add(types.InlineKeyboardButton(f"Открыть {name} ({code})", callback_data=f"open_fav_{code}"))
 
         markup.add(types.InlineKeyboardButton("⬅️ Назад в меню", callback_data="main_menu"))
@@ -369,7 +386,7 @@ def callback_inline(call):
             return
         list_text = "📋 **Список всех загруженных моделей:**\n\n"
         for code, data in models_db.items():
-            list_text += f"• `{code}` — {data.get('name', 'Без имени')} ({data.get('city', '—')})\n"
+            list_text += f"• `{code}` — {data.get('name', 'Без имени')} ({data.get('contact', data.get('city', '—'))})\n"
         bot.send_photo(call.message.chat.id, WELCOME_IMAGE, caption=list_text, parse_mode="Markdown", reply_markup=get_back_button())
 
     elif call.data == "w_delete_model":
@@ -428,6 +445,7 @@ def callback_inline(call):
 # ====================== ПОИСК МОДЕЛИ ======================
 def process_model_code(message):
     code = message.text.strip()
+    log_user_action(message.from_user, "введён код модели", f"code={code}")
     if code in models_db:
         model = models_db[code]
         try:
@@ -465,13 +483,13 @@ def admin_input_name(message):
     if message.from_user.id != ADMIN_ID:
         return
     temp_model_creation[message.from_user.id]["name"] = message.text.strip()
-    msg = bot.send_message(message.chat.id, "Шаг 3/7: Введите **город**:", parse_mode="Markdown")
-    bot.register_next_step_handler(msg, admin_input_city)
+    msg = bot.send_message(message.chat.id, "Шаг 3/7: Введите **контакт модели** (например: @nasti1p):", parse_mode="Markdown")
+    bot.register_next_step_handler(msg, admin_input_contact)
 
-def admin_input_city(message):
+def admin_input_contact(message):
     if message.from_user.id != ADMIN_ID:
         return
-    temp_model_creation[message.from_user.id]["city"] = message.text.strip()
+    temp_model_creation[message.from_user.id]["contact"] = message.text.strip()
     msg = bot.send_message(
         message.chat.id,
         "Шаг 4/7: Отправьте **ссылку на фото** модели\n(или напишите `пропустить`):",
@@ -532,7 +550,7 @@ def admin_input_description(message):
     text = (
         f"✨ **АНКЕТА МОДЕЛИ #{data['code']}** ✨\n\n"
         f"👤 **Имя:** {data['name']}\n"
-        f"📍 **Город:** {data['city']}\n\n"
+        f"📞 **Контакт модели:** {data['contact']}\n\n"
         f"💸 **Прайс:**\n"
         f"{data['price']}\n\n"
         f"🔥 **Допы:**\n"
@@ -546,7 +564,7 @@ def admin_input_description(message):
     models_db[data["code"]] = {
         "photo": data["photo"],
         "name": data["name"],
-        "city": data["city"],
+        "contact": data["contact"],
         "text": text,
         "services": services
     }
@@ -558,7 +576,7 @@ def admin_input_description(message):
         message.chat.id,
         f"✅ Анкета **#{data['code']}** успешно создана и сохранена!\n\n"
         f"Имя: {data['name']}\n"
-        f"Город: {data['city']}",
+        f"Контакт: {data['contact']}",
         parse_mode="Markdown"
     )
 
