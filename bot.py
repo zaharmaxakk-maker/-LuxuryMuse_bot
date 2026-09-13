@@ -24,12 +24,12 @@ ADMIN_ID = 8588778253
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
 
-WELCOME_IMAGE = 'https://picsum.photos/600/800'
+WELCOME_IMAGE = 'https://picsum.photos'
 
 MODELS_FILE = 'models.json'
 FAVORITES_FILE = 'favorites.json'
 
-# ====================== ФУНКЦИЯ ПРИВАТНЫХ ЛОГОВ (ТОЛЬКО ДЛЯ АДМИНА) ======================
+# ====================== ФУНКЦИЯ ПРИВАТНЫХ ЛОГОВ ======================
 def send_admin_log(message_text):
     """Отправляет лог действия только админу в ЛС"""
     try:
@@ -47,7 +47,7 @@ def load_models():
             logger.warning(f"Ошибка при загрузке models.json: {e}. Используем дефолтные данные.")
     return {
         "65103": {
-            "photo": "https://picsum.photos/600/800",
+            "photo": "https://picsum.photos",
             "name": "Алина",
             "contact": "@alina_model",
             "text": (
@@ -126,7 +126,7 @@ def get_model_keyboard(code):
     btn_full_photo = types.InlineKeyboardButton("🔞 Фото", callback_data=f"photo_{code}")
     btn_video = types.InlineKeyboardButton("🔞 Видео", callback_data=f"video_{code}")
     btn_fav = types.InlineKeyboardButton("⭐ Добавить в избранные", callback_data=f"fav_{code}")
-    btn_reviews = types.InlineKeyboardButton("💬 Отзывы", url="https://t.me/ls_reviews")
+    btn_reviews = types.InlineKeyboardButton("💬 Отзывы", url="https://t.me")
     btn_services = types.InlineKeyboardButton("🔲 Услуги", callback_data=f"services_{code}")
     btn_back = types.InlineKeyboardButton("🏠 Назад", callback_data="main_menu")
 
@@ -221,8 +221,11 @@ def handle_callbacks(call):
     chat_id = call.message.chat.id
     message_id = call.message.message_id
     
-    # Чтобы кнопка не «зависала» в состоянии нажатия
-    bot.answer_callback_query(call.id)
+    # Сбрасываем анимацию загрузки на кнопке
+    try:
+        bot.answer_callback_query(call.id)
+    except Exception:
+        pass
 
     if call.data == "main_menu":
         welcome_text = (
@@ -233,13 +236,12 @@ def handle_callbacks(call):
         send_or_edit_photo(chat_id, message_id, welcome_text, get_main_menu())
         
     elif call.data == "order":
-        # Пример вывода первой попавшейся модели из базы
         if models_db:
             first_code = list(models_db.keys())[0]
             model = models_db[first_code]
             send_or_edit_photo(chat_id, message_id, model["text"], get_model_keyboard(first_code), photo=model["photo"])
         else:
-            bot.send_message(chat_id, "😔 В базе пока нет доступных моделей.")
+            bot.send_message(chat_id, "😔 В базе пока нет доступных моделей.", reply_markup=get_back_button())
             
     elif call.data == "about":
         bot.send_message(chat_id, "✨ **LuxuryMuse** — это премиальное агентство.\nМы предоставляем лучший сервис.", reply_markup=get_back_button())
