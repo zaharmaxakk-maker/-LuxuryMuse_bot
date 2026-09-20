@@ -55,6 +55,52 @@ DEFAULT_DESCRIPTION = (
     "С ней время останавливается, а после встречи хочется вернуться снова."
 )
 
+# ====================== КАСТОМНЫЕ ЭМОДЗИ (пак hythohty) ======================
+# ID из https://t.me/addemoji/hythohty
+EMOJI = {
+    "msg_check":     "5330532504325627349",  # сообщение + галочка
+    "msg_stack":     "5330250986399244468",  # сообщение поверх другого
+    "refresh":       "5330371455936925090",  # 🔄
+    "wave":          "5327998881642878671",  # 👋
+    "pen":           "5327814949668426911",  # 🖊
+    "heart":         "5328012045717646006",  # ❤️
+    "phone":         "5330234317631164422",  # 📞
+    "exclaim":       "5330240665592827101",  # ❗️
+    "adult":         "5330149960178506226",  # 🔞
+    "plus":          "5330266559950656963",  # ➕
+    "cross":         "5330348928833460746",  # ❌
+    "check":         "5328253964045556790",  # ✅
+    "link":          "5330454576439009903",  # 🔗
+    "search":        "5328279055244499146",  # 🔍
+    "money_fly":     "5330396018854893885",  # 💸
+    "lock":          "5328091876274773724",  # 🔒
+    "camera":        "5330190676468471215",  # 📷
+    "news":          "5330561263426640654",  # 📰
+    "book":          "5330167024083571618",  # 📖
+    "wallet":        "5330259494729455410",  # 👛
+    "timer":         "5330410896621611681",  # ⏱️
+    "bot":           "5330181395044147028",  # 🤖
+    "camera2":       "5327873614626726321",  # 📷
+    "star":          "5328098116862251040",  # ⭐️
+    "user":          "5328202759445452024",  # 👤
+    "users":         "5328010804472092077",  # 👥
+    "card":          "5330377305682385409",  # 💳
+    "home":          "5330515552089707798",  # 🏠
+    "idea":          "5327784348026443840",  # 💡
+    "settings":      "5330499609171105603",  # ⚙️
+    "moon":          "5330161333251904418",  # 🌙
+    "grid":          "5327932155030966631",  # ⚙️ 4 квадратика
+    "money_fly2":    "5328013836719002683",  # 💸
+    "party":         "5330454434705084292",  # 🎉
+    "arrow_right":   "5330378435258785686",  # ➡️
+    "arrow_left":    "5330288730571839538",  # ⬅️
+    "chart":         "5327906453946688703",  # 📊
+    "sparkles":      "5330217885086292561",  # ✨
+    "kiss":          "5328055888743798817",  # 💋
+    "butterfly":     "5328049317443836138",  # 🦋
+    "dance":         "5328222305841614729",  # 💃
+}
+
 # ====================== ЗАГРУЗКА / СОХРАНЕНИЕ ======================
 def load_json(filename, default=None):
     if default is None:
@@ -209,18 +255,19 @@ def set_default_commands():
 # ====================== КЛАВИАТУРЫ ======================
 def get_model_keyboard(code):
     markup = types.InlineKeyboardMarkup(row_width=2)
-    btn_order = types.InlineKeyboardButton("🤝 Оформить", callback_data=f"order_model_{code}")
-    btn_photo = types.InlineKeyboardButton("🖼️ Другое фото", callback_data=f"photo_{code}")
+    btn_order = types.InlineKeyboardButton("💃 Оформить", callback_data=f"order_model_{code}")
+    btn_photo = types.InlineKeyboardButton("📷 Другое фото", callback_data=f"photo_{code}")
     btn_full_photo = types.InlineKeyboardButton("🔞 Фото", callback_data=f"photo_{code}")
     btn_video = types.InlineKeyboardButton("🔞 Видео", callback_data=f"video_{code}")
-    btn_fav = types.InlineKeyboardButton("⭐ В избранные", callback_data=f"fav_{code}")
+    btn_private = types.InlineKeyboardButton("🔒 Приватка", callback_data=f"private_{code}")
+    btn_fav = types.InlineKeyboardButton("⭐️ В избранные", callback_data=f"fav_{code}")
     btn_reviews = types.InlineKeyboardButton("💬 Отзывы", url="https://t.me/ls_reviews")
-    btn_services = types.InlineKeyboardButton("🔲 Услуги", callback_data=f"services_{code}")
+    btn_services = types.InlineKeyboardButton("💋 Услуги", callback_data=f"services_{code}")
     btn_back = types.InlineKeyboardButton("🏠 Назад", callback_data="main_menu")
 
     markup.add(btn_order, btn_photo)
     markup.add(btn_full_photo, btn_video)
-    markup.add(btn_fav)
+    markup.add(btn_private, btn_fav)
     markup.add(btn_reviews, btn_services)
     markup.add(btn_back)
     return markup
@@ -228,13 +275,13 @@ def get_model_keyboard(code):
 def get_main_menu():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton("🛍️ Оформить модель", callback_data="order"),
-        types.InlineKeyboardButton("💰 Баланс", callback_data="balance"),
-        types.InlineKeyboardButton("🎟 Ввести промокод", callback_data="enter_promo"),
-        types.InlineKeyboardButton("⭐ Мои избранные", callback_data="my_favorites"),
+        types.InlineKeyboardButton("💃 Оформить модель", callback_data="order"),
+        types.InlineKeyboardButton("💸 Баланс", callback_data="balance"),
+        types.InlineKeyboardButton("💳 Ввести промокод", callback_data="enter_promo"),
+        types.InlineKeyboardButton("⭐️ Мои избранные", callback_data="my_favorites"),
         types.InlineKeyboardButton("✨ О проекте LuxuryMuse", callback_data="about"),
-        types.InlineKeyboardButton("💎 Наши услуги", callback_data="services"),
-        types.InlineKeyboardButton("📩 Связаться с нами / Поддержка", callback_data="contact")
+        types.InlineKeyboardButton("💋 Наши услуги", callback_data="services"),
+        types.InlineKeyboardButton("📞 Связаться с нами / Поддержка", callback_data="contact")
     )
     return markup
 
@@ -248,11 +295,11 @@ def get_worker_markup():
     markup.add(
         types.InlineKeyboardButton("➕ Создать анкету", callback_data="w_create_model"),
         types.InlineKeyboardButton("📋 Список всех моделей", callback_data="w_list_models"),
-        types.InlineKeyboardButton("🗑 Удалить анкету", callback_data="w_delete_model"),
-        types.InlineKeyboardButton("🎟 Создать промокод", callback_data="w_create_promo"),
-        types.InlineKeyboardButton("✏️ Изменить промокод", callback_data="w_edit_promo"),
+        types.InlineKeyboardButton("❌ Удалить анкету", callback_data="w_delete_model"),
+        types.InlineKeyboardButton("💳 Создать промокод", callback_data="w_create_promo"),
+        types.InlineKeyboardButton("🖊 Изменить промокод", callback_data="w_edit_promo"),
         types.InlineKeyboardButton("👥 Пользователи / Логи", callback_data="w_users"),
-        types.InlineKeyboardButton("🚫 Заблокировать пользователя", callback_data="w_block_user"),
+        types.InlineKeyboardButton("🔒 Заблокировать пользователя", callback_data="w_block_user"),
         types.InlineKeyboardButton("✅ Разблокировать пользователя", callback_data="w_unblock_user"),
         types.InlineKeyboardButton("📊 Статистика бота", callback_data="w_stats")
     )
@@ -378,7 +425,19 @@ def callback_inline(call):
         return
 
     elif call.data.startswith(("photo_", "video_")):
-        bot.answer_callback_query(call.id, text="Информация обновляется...", show_alert=False)
+        bot.answer_callback_query(
+            call.id,
+            text="⏳ Временно не работает\nРаздел в разработке",
+            show_alert=True
+        )
+        return
+
+    elif call.data.startswith("private_"):
+        bot.answer_callback_query(
+            call.id,
+            text="🔒 Приватку можно приобрести у менеджера\nза 2000 ₽\n\n👉 @mengersalon",
+            show_alert=True
+        )
         return
 
     elif call.data.startswith("fav_"):
@@ -660,10 +719,10 @@ def callback_inline(call):
             bot.send_message(call.message.chat.id, "Пользователей пока нет.")
             return
 
-        # Показываем по 10 пользователей за раз
+        # Показываем до 10000 пользователей
         markup = types.InlineKeyboardMarkup(row_width=1)
         sorted_users = sorted(users_db.items(), key=lambda x: x[1].get("last_action", ""), reverse=True)
-        for uid, data in sorted_users[:30]:  # максимум 30
+        for uid, data in sorted_users[:10000]:
             uname = f"@{data.get('username')}" if data.get("username") else "без username"
             name = data.get("first_name", "") or "Без имени"
             bal = data.get("balance", 0)
@@ -675,7 +734,7 @@ def callback_inline(call):
         markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="w_back_worker"))
         bot.send_message(
             call.message.chat.id,
-            f"👥 **Пользователи** (показано до 30, всего {len(users_db)})\n"
+            f"👥 **Пользователи** (показано до 10000, всего {len(users_db)})\n"
             f"Нажмите на пользователя, чтобы изменить баланс / посмотреть статистику:",
             reply_markup=markup,
             parse_mode="Markdown"
