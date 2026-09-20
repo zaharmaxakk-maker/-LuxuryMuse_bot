@@ -101,6 +101,63 @@ EMOJI = {
     "dance":         "5328222305841614729",  # 💃
 }
 
+# ====================== ХЕЛПЕР ДЛЯ КАСТОМНЫХ ЭМОДЗИ ======================
+def utf16_len(s):
+    """Длина строки в UTF-16 code units (как требует Telegram)"""
+    return len(s.encode('utf-16-le')) // 2
+
+def make_custom_emoji_entity(custom_emoji_id, offset, length=2):
+    return types.MessageEntity(
+        type="custom_emoji",
+        offset=offset,
+        length=length,
+        custom_emoji_id=str(custom_emoji_id)
+    )
+
+def send_with_emoji(chat_id, text_parts, reply_markup=None, photo=None):
+    """
+    text_parts — список кортежей:
+      ("text", "обычный текст")
+      ("emoji", "ключ_из_EMOJI")  — вставляет кастомный эмодзи
+    """
+    result_text = ""
+    entities = []
+    for kind, value in text_parts:
+        if kind == "text":
+            result_text += value
+        elif kind == "emoji":
+            eid = EMOJI.get(value)
+            if eid:
+                offset = utf16_len(result_text)
+                # Ставим placeholder (обычный эмодзи или символ)
+                placeholder = "⭐"
+                result_text += placeholder
+                entities.append(make_custom_emoji_entity(eid, offset, utf16_len(placeholder)))
+            else:
+                result_text += "•"
+    try:
+        if photo:
+            bot.send_photo(
+                chat_id, photo,
+                caption=result_text,
+                reply_markup=reply_markup,
+                caption_entities=entities if entities else None
+            )
+        else:
+            bot.send_message(
+                chat_id, result_text,
+                reply_markup=reply_markup,
+                entities=entities if entities else None
+            )
+    except Exception as e:
+        # Фоллбек без entities
+        logger.warning(f"Не удалось отправить с custom emoji: {e}")
+        plain = result_text
+        if photo:
+            bot.send_photo(chat_id, photo, caption=plain, reply_markup=reply_markup, parse_mode="Markdown")
+        else:
+            bot.send_message(chat_id, plain, reply_markup=reply_markup, parse_mode="Markdown")
+
 # ====================== ЗАГРУЗКА / СОХРАНЕНИЕ ======================
 def load_json(filename, default=None):
     if default is None:
@@ -347,17 +404,19 @@ def send_welcome(message):
         return
     ensure_user(message.from_user)
     log_user_action(message.from_user, "/start или /menu", f"chat_id={message.chat.id}")
-    welcome_text = (
-        f"Приветствуем вас, {message.from_user.first_name}! ✨\n\n"
-        "Добро пожаловать в **LuxuryMuse** — пространство роскоши, красоты и наслаждения.\n\n"
-        "Выберите интересующий вас раздел в меню ниже:"
-    )
-    bot.send_photo(
+    # Кастомные эмодзи: wave + sparkles + dance
+    send_with_emoji(
         message.chat.id,
-        WELCOME_IMAGE,
-        caption=welcome_text,
+        [
+            ("emoji", "wave"),
+            ("text", f" Приветствуем вас, {message.from_user.first_name}! "),
+            ("emoji", "sparkles"),
+            ("text", "\n\nДобро пожаловать в **LuxuryMuse** — пространство роскоши, красоты и наслаждения.\n\n"),
+            ("emoji", "dance"),
+            ("text", " Выберите интересующий вас раздел в меню ниже:"),
+        ],
         reply_markup=get_main_menu(),
-        parse_mode="Markdown"
+        photo=WELCOME_IMAGE
     )
 
 @bot.message_handler(commands=['help'])
@@ -366,15 +425,20 @@ def help_command(message):
         return
     ensure_user(message.from_user)
     log_user_action(message.from_user, "/help")
-    help_text = (
-        "❓ **Справка по использованию бота**\n\n"
-        "• Для перехода в главное меню используйте кнопку или команду /menu\n"
-        "• Баланс: /balance или кнопка «Баланс»\n"
-        "• Промокоды активируются через кнопку «Ввести промокод»\n"
-        "• По всем вопросам и для связи с техподдержкой пишите: @mengersalon\n"
-        "• Воркеры могут открыть свою панель через команду /worker"
+    send_with_emoji(
+        message.chat.id,
+        [
+            ("emoji", "exclaim"),
+            ("text", " **Справка по использованию бота**\n\n"
+                     "• Для перехода в главное меню используйте кнопку или команду /menu\n"
+                     "• Баланс: /balance или кнопка «Баланс»\n"
+                     "• Промокоды активируются через кнопку «Ввести промокод»\n"
+                     "• По всем вопросам и для связи с техподдержкой пишите: @mengersalon\n"
+                     "• Воркеры могут открыть свою панель через команду /worker"),
+        ],
+        reply_markup=get_back_button(),
+        photo=WELCOME_IMAGE
     )
-    bot.send_photo(message.chat.id, WELCOME_IMAGE, caption=help_text, reply_markup=get_back_button(), parse_mode="Markdown")
 
 @bot.message_handler(commands=['balance'])
 def balance_command(message):
@@ -383,13 +447,19 @@ def balance_command(message):
     ensure_user(message.from_user)
     log_user_action(message.from_user, "/balance")
     bal = get_balance(message.from_user.id)
-    text = (
-        f"💰 **Ваш баланс**\n\n"
-        f"Текущий баланс: **{bal} ₽**\n\n"
-        f"Чтобы пополнить — напишите менеджеру @mengersalon\n"
-        f"Или активируйте промокод через меню."
+    send_with_emoji(
+        message.chat.id,
+        [
+            ("emoji", "wallet"),
+            ("text", " **Ваш баланс**\n\nТекущий баланс: **"),
+            ("text", f"{bal} ₽**\n\n"),
+            ("emoji", "money_fly"),
+            ("text", " Чтобы пополнить — напишите менеджеру @mengersalon\n"),
+            ("emoji", "card"),
+            ("text", " Или активируйте промокод через меню."),
+        ],
+        reply_markup=get_back_button()
     )
-    bot.send_message(message.chat.id, text, reply_markup=get_back_button(), parse_mode="Markdown")
 
 @bot.message_handler(commands=['worker'])
 def worker_menu(message):
@@ -400,12 +470,17 @@ def worker_menu(message):
         bot.send_message(message.chat.id, "Неизвестная команда. Введите /start для начала работы.")
         return
 
-    worker_text = (
-        "⚙️ **Панель управления воркера (Владельца)**\n\n"
-        "Здесь вы можете создавать, удалять анкеты, промокоды, "
-        "управлять пользователями и балансами."
+    send_with_emoji(
+        message.chat.id,
+        [
+            ("emoji", "settings"),
+            ("text", " **Панель управления воркера (Владельца)**\n\n"
+                     "Здесь вы можете создавать, удалять анкеты, промокоды, "
+                     "управлять пользователями и балансами."),
+        ],
+        reply_markup=get_worker_markup(),
+        photo=WELCOME_IMAGE
     )
-    bot.send_photo(message.chat.id, WELCOME_IMAGE, caption=worker_text, reply_markup=get_worker_markup(), parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
@@ -475,13 +550,20 @@ def callback_inline(call):
     elif call.data == "balance":
         bot.answer_callback_query(call.id)
         bal = get_balance(call.from_user.id)
-        text = (
-            f"💰 **Ваш баланс**\n\n"
-            f"Текущий баланс: **{bal} ₽**\n\n"
-            f"Чтобы пополнить — напишите менеджеру @mengersalon\n"
-            f"Или активируйте промокод через меню."
+        send_with_emoji(
+            call.message.chat.id,
+            [
+                ("emoji", "wallet"),
+                ("text", " **Ваш баланс**\n\nТекущий баланс: **"),
+                ("text", f"{bal} ₽**\n\n"),
+                ("emoji", "money_fly"),
+                ("text", " Чтобы пополнить — напишите менеджеру @mengersalon\n"),
+                ("emoji", "card"),
+                ("text", " Или активируйте промокод через меню."),
+            ],
+            reply_markup=get_back_button(),
+            photo=WELCOME_IMAGE
         )
-        send_or_edit_photo(call.message.chat.id, call.message.message_id, text, get_back_button())
 
     # ---------- Промокод (пользователь) ----------
     elif call.data == "enter_promo":
@@ -549,32 +631,51 @@ def callback_inline(call):
         bot.register_next_step_handler(msg, process_model_code)
 
     elif call.data == "about":
-        about_text = (
-            "✨ **О проекте LuxuryMuse**\n\n"
-            "LuxuryMuse — это закрытый премиальный сервис, созданный для тех, кто ценит красоту, "
-            "стиль и настоящий комфорт.\n\n"
-            "Мы предлагаем эксклюзивных моделей для встреч, выездов и особых случаев. "
-            "Каждая анкета тщательно отобрана, а сервис работает быстро, дискретно и на высшем уровне.\n\n"
-            "Здесь красота встречается с удовольствием."
+        bot.answer_callback_query(call.id)
+        send_with_emoji(
+            call.message.chat.id,
+            [
+                ("emoji", "sparkles"),
+                ("text", " **О проекте LuxuryMuse**\n\n"
+                         "LuxuryMuse — это закрытый премиальный сервис, созданный для тех, кто ценит красоту, "
+                         "стиль и настоящий комфорт.\n\n"
+                         "Мы предлагаем эксклюзивных моделей для встреч, выездов и особых случаев. "
+                         "Каждая анкета тщательно отобрана, а сервис работает быстро, дискретно и на высшем уровне.\n\n"),
+                ("emoji", "kiss"),
+                ("text", " Здесь красота встречается с удовольствием."),
+            ],
+            reply_markup=get_back_button(),
+            photo=WELCOME_IMAGE
         )
-        send_or_edit_photo(call.message.chat.id, call.message.message_id, about_text, get_back_button())
 
     elif call.data == "services":
-        services_text = (
-            "💎 **Наши услуги**\n\n"
-            "Наш салон предлагает возможность **заказать модель на выезд**.\n\n"
-            "Вы выбираете девушку по коду, знакомитесь с анкетой и оформляете заказ через менеджера.\n\n"
-            "Всё просто, быстро и конфиденциально."
+        bot.answer_callback_query(call.id)
+        send_with_emoji(
+            call.message.chat.id,
+            [
+                ("emoji", "kiss"),
+                ("text", " **Наши услуги**\n\n"
+                         "Наш салон предлагает возможность **заказать модель на выезд**.\n\n"
+                         "Вы выбираете девушку по коду, знакомитесь с анкетой и оформляете заказ через менеджера.\n\n"
+                         "Всё просто, быстро и конфиденциально."),
+            ],
+            reply_markup=get_back_button(),
+            photo=WELCOME_IMAGE
         )
-        send_or_edit_photo(call.message.chat.id, call.message.message_id, services_text, get_back_button())
 
     elif call.data == "contact":
-        contact_text = (
-            "📩 **Служба поддержки и связи**\n\n"
-            "По любым вопросам, предложениям или для личной консультации пишите нашей поддержке напрямую:\n\n"
-            "👉 Наш аккаунт: **@mengersalon**"
+        bot.answer_callback_query(call.id)
+        send_with_emoji(
+            call.message.chat.id,
+            [
+                ("emoji", "phone"),
+                ("text", " **Служба поддержки и связи**\n\n"
+                         "По любым вопросам, предложениям или для личной консультации пишите нашей поддержке напрямую:\n\n"
+                         "👉 Наш аккаунт: **@mengersalon**"),
+            ],
+            reply_markup=get_back_button(),
+            photo=WELCOME_IMAGE
         )
-        send_or_edit_photo(call.message.chat.id, call.message.message_id, contact_text, get_back_button())
 
     elif call.data == "main_menu":
         welcome_text = "Выберите интересующий вас раздел в меню ниже:"
@@ -641,27 +742,37 @@ def callback_inline(call):
     elif call.data == "w_back_worker":
         if call.from_user.id != ADMIN_ID:
             return
-        worker_text = (
-            "⚙️ **Панель управления воркера (Владельца)**\n\n"
-            "Здесь вы можете создавать, удалять анкеты, промокоды, "
-            "управлять пользователями и балансами."
+        send_with_emoji(
+            call.message.chat.id,
+            [
+                ("emoji", "settings"),
+                ("text", " **Панель управления воркера (Владельца)**\n\n"
+                         "Здесь вы можете создавать, удалять анкеты, промокоды, "
+                         "управлять пользователями и балансами."),
+            ],
+            reply_markup=get_worker_markup(),
+            photo=WELCOME_IMAGE
         )
-        bot.send_photo(call.message.chat.id, WELCOME_IMAGE, caption=worker_text, reply_markup=get_worker_markup(), parse_mode="Markdown")
 
     elif call.data == "w_stats":
         if call.from_user.id != ADMIN_ID:
             return
         total_balance = sum(u.get("balance", 0) for u in users_db.values())
-        stats_text = (
-            f"📊 **Статистика бота**\n\n"
-            f"Всего анкет: **{len(models_db)}**\n"
-            f"Пользователей: **{len(users_db)}**\n"
-            f"Промокодов: **{len(promos_db)}**\n"
-            f"Заблокировано: **{len(blocked_users)}**\n"
-            f"Сумма балансов: **{total_balance} ₽**\n"
-            f"Админ ID: `{ADMIN_ID}`"
+        send_with_emoji(
+            call.message.chat.id,
+            [
+                ("emoji", "chart"),
+                ("text", " **Статистика бота**\n\n"
+                         f"Всего анкет: **{len(models_db)}**\n"
+                         f"Пользователей: **{len(users_db)}**\n"
+                         f"Промокодов: **{len(promos_db)}**\n"
+                         f"Заблокировано: **{len(blocked_users)}**\n"
+                         f"Сумма балансов: **{total_balance} ₽**\n"
+                         f"Админ ID: `{ADMIN_ID}`"),
+            ],
+            reply_markup=get_back_button(),
+            photo=WELCOME_IMAGE
         )
-        bot.send_photo(call.message.chat.id, WELCOME_IMAGE, caption=stats_text, parse_mode="Markdown", reply_markup=get_back_button())
 
     # ---------- Промокоды (воркер) ----------
     elif call.data == "w_create_promo":
