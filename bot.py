@@ -433,8 +433,7 @@ def help_command(message):
                      "• Для перехода в главное меню используйте кнопку или команду /menu\n"
                      "• Баланс: /balance или кнопка «Баланс»\n"
                      "• Промокоды активируются через кнопку «Ввести промокод»\n"
-                     "• По всем вопросам и для связи с техподдержкой пишите: @mengersalon\n"
-                     "• Воркеры могут открыть свою панель через команду /worker"),
+                     "• По всем вопросам и для связи с техподдержкой пишите: @mengersalon"),
         ],
         reply_markup=get_back_button(),
         photo=WELCOME_IMAGE
@@ -830,10 +829,43 @@ def callback_inline(call):
             bot.send_message(call.message.chat.id, "Пользователей пока нет.")
             return
 
-        # Показываем до 10000 пользователей
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("🔍 Поиск по username / ID", callback_data="w_search_user"),
+            types.InlineKeyboardButton("📋 Последние 50 пользователей", callback_data="w_list_users_50"),
+            types.InlineKeyboardButton("⬅️ Назад", callback_data="w_back_worker")
+        )
+        bot.send_message(
+            call.message.chat.id,
+            f"👥 **Пользователи / Логи**\n\n"
+            f"Всего пользователей: **{len(users_db)}**\n\n"
+            f"Выберите действие:",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+
+    elif call.data == "w_search_user":
+        if call.from_user.id != ADMIN_ID:
+            return
+        bot.answer_callback_query(call.id)
+        msg = bot.send_message(
+            call.message.chat.id,
+            "🔍 **Поиск пользователя**\n\n"
+            "Введите **username** (с @ или без) или **Telegram ID**:",
+            parse_mode="Markdown"
+        )
+        bot.register_next_step_handler(msg, admin_search_user)
+
+    elif call.data == "w_list_users_50":
+        if call.from_user.id != ADMIN_ID:
+            return
+        if not users_db:
+            bot.send_message(call.message.chat.id, "Пользователей пока нет.")
+            return
+
         markup = types.InlineKeyboardMarkup(row_width=1)
         sorted_users = sorted(users_db.items(), key=lambda x: x[1].get("last_action", ""), reverse=True)
-        for uid, data in sorted_users[:10000]:
+        for uid, data in sorted_users[:50]:
             uname = f"@{data.get('username')}" if data.get("username") else "без username"
             name = data.get("first_name", "") or "Без имени"
             bal = data.get("balance", 0)
@@ -842,10 +874,11 @@ def callback_inline(call):
                 f"{blocked}{name} ({uname}) | {bal}₽",
                 callback_data=f"user_{uid}"
             ))
-        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="w_back_worker"))
+        markup.add(types.InlineKeyboardButton("🔍 Поиск", callback_data="w_search_user"))
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="w_users"))
         bot.send_message(
             call.message.chat.id,
-            f"👥 **Пользователи** (показано до 10000, всего {len(users_db)})\n"
+            f"👥 **Последние 50 пользователей** (всего {len(users_db)})\n"
             f"Нажмите на пользователя, чтобы изменить баланс / посмотреть статистику:",
             reply_markup=markup,
             parse_mode="Markdown"
@@ -1273,6 +1306,107 @@ def admin_edit_promo_max(message):
             parse_mode="Markdown"
         )
     del temp_promo_creation[message.from_user.id]
+
+
+# ====================== ПОИСК ПОЛЬЗОВАТЕЛЯ ======================
+def admin_search_user(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    query = (message.text or "").strip()
+    if not query:
+        bot.send_message(message.chat.id, "❌ Пустой запрос. Введите username или ID:")
+        bot.register_next_step_handler(message, admin_search_user)
+        return
+
+    # Убираем @ если есть
+    query_clean = query.lstrip("@").lower()
+    found = []
+
+    # Поиск по ID
+    if query.isdigit() or query_clean.isdigit():
+        uid = query if query.isdigit() else query_clean
+        if uid in users_db:
+            found.append((uid, users_db[uid]))
+        elif str(int(uid)) in users_db:
+            found.append((str(int(uid)), users_db[str(int(uid))]))
+
+    # Поиск по username / имени
+    if not found:
+        for uid, data in users_db.items():
+            uname = (data.get("username") or "").lower()
+            fname = (data.get("first_name") or "").lower()
+            lname = (data.get("last_name") or "").lower()
+            if uname and (query_clean in uname or uname == query_clean):
+                found.append((uid, data))
+            elif query_clean in fname or query_clean in lname:
+                if (uid, data) not in found:
+                    found.append((uid, data))
+
+    if not found:
+        markup = types.InlineKeyboardMarkup()
+        markup.add(
+            types.InlineKeyboardButton("🔍 Искать снова", callback_data="w_search_user"),
+            types.InlineKeyboardButton("⬅️ Назад", callback_data="w_users")
+        )
+        bot.send_message(
+            message.chat.id,
+            f"❌ Пользователь по запросу `{query}` не найден.",
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+        return
+
+    # Один результат — сразу карточка
+    if len(found) == 1:
+        uid, data = found[0]
+        uname = f"@{data.get('username')}" if data.get("username") else "без username"
+        name = (data.get("first_name") or "") + (f" {data.get('last_name')}" if data.get("last_name") else "")
+        bal = data.get("balance", 0)
+        blocked = "Да 🚫" if is_blocked(uid) else "Нет"
+        text = (
+            f"👤 **Пользователь** (найден по поиску)\n\n"
+            f"Имя: {name.strip() or '—'}\n"
+            f"Username: {uname}\n"
+            f"ID: `{uid}`\n"
+            f"Баланс: **{bal} ₽**\n"
+            f"Действий: {data.get('actions', 0)}\n"
+            f"Присоединился: {data.get('joined', '—')}\n"
+            f"Последнее действие: {data.get('last_action', '—')}\n"
+            f"Заблокирован: {blocked}"
+        )
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("💰 Изменить баланс", callback_data=f"setbal_{uid}"),
+            types.InlineKeyboardButton("🚫 Заблокировать" if not is_blocked(uid) else "✅ Разблокировать",
+                                       callback_data=f"toggleblock_{uid}"),
+            types.InlineKeyboardButton("🔍 Новый поиск", callback_data="w_search_user"),
+            types.InlineKeyboardButton("⬅️ К пользователям", callback_data="w_users"),
+            types.InlineKeyboardButton("🏠 В панель воркера", callback_data="w_back_worker")
+        )
+        bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="Markdown")
+        return
+
+    # Несколько результатов
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    for uid, data in found[:30]:
+        uname = f"@{data.get('username')}" if data.get("username") else "без username"
+        name = data.get("first_name", "") or "Без имени"
+        bal = data.get("balance", 0)
+        blocked = "🚫" if is_blocked(uid) else ""
+        markup.add(types.InlineKeyboardButton(
+            f"{blocked}{name} ({uname}) | {bal}₽",
+            callback_data=f"user_{uid}"
+        ))
+    markup.add(types.InlineKeyboardButton("🔍 Новый поиск", callback_data="w_search_user"))
+    markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="w_users"))
+    bot.send_message(
+        message.chat.id,
+        f"🔍 Найдено **{len(found)}** пользователей по запросу `{query}`"
+        + (f" (показано 30)" if len(found) > 30 else "") + ":",
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
+
 
 # ====================== БАЛАНС / БЛОКИРОВКА ======================
 def admin_set_balance(message):
